@@ -1,7 +1,6 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 
-//  g++ -o main  main.cpp `pkg-config --cflags --libs opencv4`
 
 int main() {
     // Open the camera device (you may need to adjust the index)

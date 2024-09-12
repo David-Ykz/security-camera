@@ -1,37 +1,32 @@
 #include <opencv2/opencv.hpp>
-#include <iostream>
+#include <vector>
 
-int main() {
-    // Open the default camera (0 means the first connected camera)
-    cv::VideoCapture cap(1);
+extern "C" {
+    int capture_frame(unsigned char** data, int* size) {
+        cv::VideoCapture cap(1);
 
-    // Check if camera opened successfully
-    if (!cap.isOpened()) {
-        std::cerr << "Error: Could not open the camera." << std::endl;
-        return -1;
-    }
+        if (!cap.isOpened()) {
+            std::cerr << "Error: Could not open the camera." << std::endl;
+            return -1;
+        }
 
-    cv::Mat frame;
-    while (true) {
-        // Capture frame-by-frame
+        cv::Mat frame;
         cap >> frame;
 
-        // If the frame is empty, break the loop
-        if (frame.empty())
-            break;
-
-        // Display the resulting frame
-//        cv::imshow("Camera Feed", frame);
-
-        // Exit the loop if the user presses the 'q' key
-        if (cv::waitKey(30) == 'q') {
-            break;
+        if (frame.empty()) {
+            return -1;
         }
+
+        // Encode the frame as a JPEG
+        std::vector<unsigned char> buf;
+        cv::imencode(".jpg", frame, buf);
+
+        // Allocate memory for the image and pass the data back
+        *size = buf.size();
+        *data = (unsigned char*)malloc(*size);
+        std::copy(buf.begin(), buf.end(), *data);
+
+        cap.release();
+        return 0;  // Success
     }
-
-    // Release the camera
-    cap.release();
-    cv::destroyAllWindows();
-
-    return 0;
 }
