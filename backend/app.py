@@ -1,7 +1,8 @@
 from flask import Flask, Response
 from flask_cors import CORS
 import cv2
-import time
+import datetime
+import numpy as np
 
 app = Flask(__name__)
 CORS(app)
@@ -9,6 +10,8 @@ CORS(app)
 camera = cv2.VideoCapture(1)
 
 def generate_frames():
+    MOTION_THRESHOLD = 1
+    prevMeanBrightness = 0
     while True:
         success, frame = camera.read()
         if not success:
@@ -17,6 +20,11 @@ def generate_frames():
         else:
             # Encode the frame in JPEG format
             ret, buffer = cv2.imencode('.jpg', frame)
+            grayscaleImage = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            currMeanBrightness = np.mean(grayscaleImage)
+            if np.abs(currMeanBrightness - prevMeanBrightness) > MOTION_THRESHOLD:
+                print(f"{datetime.datetime.now()}: Motion detected, difference value: {currMeanBrightness - prevMeanBrightness}")
+            prevMeanBrightness = currMeanBrightness
             frame = buffer.tobytes()
             
             # Yield the frame in byte format with the appropriate header for streaming
