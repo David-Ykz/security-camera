@@ -3,7 +3,7 @@ from flask_cors import CORS
 import cv2
 import datetime
 import numpy as np
-import face_recognition
+#import face_recognition
 
 app = Flask(__name__)
 CORS(app)
@@ -11,10 +11,51 @@ CORS(app)
 camera = cv2.VideoCapture(1)
 MOTION_THRESHOLD = 0.9
 
-recognizedFace1 = face_recognition.load_image_file("recognizedFace1.jpg")
-recognizedFace1Encoding = face_recognition.face_encodings(recognizedFace1)[0]
+faceCascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+faceRecognizer = cv2.face.LBPHFaceRecognizer_create()
 
-knownFaces = [recognizedFace1Encoding]
+def prepareTrainingData(imagePath):
+    grayImage = cv2.imread(imagePath, cv2.IMREAD_GRAYSCALE)
+    faces = faceCascade.detectMultiScale(grayImage, scaleFactor=1.1, minNeighbors=5)
+    if len(faces) == 0:
+        print("No face found in the reference image.")
+        return None, None
+    (x, y, w, h) = faces[0]
+    return grayImage[y:y + h, x:x + w], 1  # Label '1' for the known person
+
+def detectAndRecognizeFace(frame):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    faces = faceCascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
+
+    for (x, y, w, h) in faces:
+        # Draw a bounding box around the face
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+
+        # Recognize the face (if recognizer is trained)
+        faceROI = gray[y:y + h, x:x + w]
+        label, confidence = faceRecognizer.predict(faceROI)
+        if label == 1:
+            text = f"Recognized (Confidence: {confidence:.2f})"
+        else:
+            text = "Unknown"
+        
+        # Display recognition result
+        cv2.putText(frame, text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+
+    return frame
+
+
+trainingImagePath = 'recognizedFace1.jpg'
+trainingImage, label = prepareTrainingData(trainingImagePath)
+if trainingImage is not None:
+    faceRecognizer.train([trainingImage], np.array([label]))
+
+
+
+# recognizedFace1 = face_recognition.load_image_file("recognizedFace1.jpg")
+# recognizedFace1Encoding = face_recognition.face_encodings(recognizedFace1)[0]
+
+# knownFaces = [recognizedFace1Encoding]
 
 def generate_frames():
     prevMeanBrightness = 0
@@ -32,34 +73,35 @@ def generate_frames():
 
 
 
-            rgbFrame = frame[:, :, ::-1]
-            faceLocations = face_recognition.face_locations(rgbFrame)
-            faceEncodings = face_recognition.face_encodings(rgbFrame, faceLocations)
-            faceNames = []
-            for face_encoding in faceEncodings:
-                matches = face_recognition.compare_faces(knownFaces, faceEncodings)
-                name = "Unknown"
+            # rgbFrame = frame[:, :, ::-1]
+            # faceLocations = face_recognition.face_locations(rgbFrame)
+            # faceEncodings = face_recognition.face_encodings(rgbFrame, faceLocations)
+            # faceNames = []
+            # for face_encoding in faceEncodings:
+            #     matches = face_recognition.compare_faces(knownFaces, faceEncodings)
+            #     name = "Unknown"
 
-                # # If a match was found in known_face_encodings, just use the first one.
-                # if True in matches:
-                #     first_match_index = matches.index(True)
-                #     name = known_face_names[first_match_index]
+            #     # # If a match was found in known_face_encodings, just use the first one.
+            #     # if True in matches:
+            #     #     first_match_index = matches.index(True)
+            #     #     name = known_face_names[first_match_index]
 
-                # Or instead, use the known face with the smallest distance to the new face
-                faceDistances = face_recognition.face_distance(knownFaces, faceEncodings)
-                bestMatchIndex = np.argmin(faceDistances)
-                if matches[bestMatchIndex]:
-                    name = knownFaces[bestMatchIndex]
+            #     # Or instead, use the known face with the smallest distance to the new face
+            #     faceDistances = face_recognition.face_distance(knownFaces, faceEncodings)
+            #     bestMatchIndex = np.argmin(faceDistances)
+            #     if matches[bestMatchIndex]:
+            #         name = knownFaces[bestMatchIndex]
 
-                faceNames.append(name)
+            #     faceNames.append(name)
 
-            for (top, right, bottom, left), name in zip(faceLocations, faceNames):
-                cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
-                cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
-                font = cv2.FONT_HERSHEY_DUPLEX
-                cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
+            # for (top, right, bottom, left), name in zip(faceLocations, faceNames):
+            #     cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
+            #     cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
+            #     font = cv2.FONT_HERSHEY_DUPLEX
+            #     cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
 
             # Encode the frame in JPEG format
+            frame = detectAndRecognizeFace(frame)
             ret, buffer = cv2.imencode('.jpg', frame)
             frame = buffer.tobytes()
             
