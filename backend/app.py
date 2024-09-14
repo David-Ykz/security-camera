@@ -1,18 +1,27 @@
 from flask import Flask, Response
 from flask_cors import CORS
 import cv2
-import datetime
+from datetime import datetime, timedelta
 import numpy as np
-#import face_recognition
+import smtplib
+from email.message import EmailMessage
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+RECIPIENT_EMAIL = os.getenv('RECIPIENT_EMAIL')
+SERVER_EMAIL = os.getenv('SERVER_EMAIL')
+SERVER_PASSWORD = os.getenv('SERVER_PASSWORD')
+
+MOTION_THRESHOLD = 0.9
+MOTION_ALERT_LIMIT = 25
+SEND_EMAIL_COOLDOWN = timedelta(minutes=5)
 
 app = Flask(__name__)
 CORS(app)
-
-camera = cv2.VideoCapture(1)
-MOTION_THRESHOLD = 0.9
-
 faceCascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 faceRecognizer = cv2.face.LBPHFaceRecognizer_create()
+camera = cv2.VideoCapture(1)
 
 def prepareTrainingData(imagePath):
     grayImage = cv2.imread(imagePath, cv2.IMREAD_GRAYSCALE)
@@ -44,6 +53,31 @@ def detectAndRecognizeFace(frame):
 
     return frame
 
+def sendEmail():
+    msg = EmailMessage()
+    msg.set_content('Your camera has detected motion.')
+    msg['Subject'] = 'Motion detected'
+    msg['From'] = SERVER_EMAIL
+    msg['To'] = RECIPIENT_EMAIL
+
+    try:
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(SERVER_EMAIL, SERVER_PASSWORD)
+            server.send_message(msg)
+            print('Email sent successfully!')
+    except Exception as e:
+        print(f'Error sending email: {e}')
+
+def detectMotion(prevMeanBrightness, frame):
+    grayscaleImage = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    currMeanBrightness = np.mean(grayscaleImage)
+    if np.abs(currMeanBrightness - prevMeanBrightness) > MOTION_THRESHOLD:
+        print(f"{datetime.now()}: Motion detected, difference value: {currMeanBrightness - prevMeanBrightness}")
+        return True, currMeanBrightness
+
+    return False, currMeanBrightness
+
 
 trainingImagePath = 'recognizedFace1.jpg'
 trainingImage, label = prepareTrainingData(trainingImagePath)
@@ -51,61 +85,33 @@ if trainingImage is not None:
     faceRecognizer.train([trainingImage], np.array([label]))
 
 
-
-# recognizedFace1 = face_recognition.load_image_file("recognizedFace1.jpg")
-# recognizedFace1Encoding = face_recognition.face_encodings(recognizedFace1)[0]
-
-# knownFaces = [recognizedFace1Encoding]
-
 def generate_frames():
     prevMeanBrightness = 0
+    motionCounter = 0
+    
+    prevEmailSentTime = datetime.now() - SEND_EMAIL_COOLDOWN
+
     while True:
         success, frame = camera.read()
         if not success:
             print("failed")
             break
         else:
-            grayscaleImage = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            currMeanBrightness = np.mean(grayscaleImage)
-            if np.abs(currMeanBrightness - prevMeanBrightness) > MOTION_THRESHOLD:
-                print(f"{datetime.datetime.now()}: Motion detected, difference value: {currMeanBrightness - prevMeanBrightness}")
-            prevMeanBrightness = currMeanBrightness
+            detectedMotion, prevMeanBrightness = detectMotion(prevMeanBrightness, frame)
+            if detectedMotion:
+                motionCounter += 1
+                if motionCounter > MOTION_ALERT_LIMIT:
+                    if datetime.now() - prevEmailSentTime > SEND_EMAIL_COOLDOWN:
+                        prevEmailSentTime = datetime.now()
+                        sendEmail()
+            elif motionCounter > 0:
+                motionCounter -= 1
 
-
-
-            # rgbFrame = frame[:, :, ::-1]
-            # faceLocations = face_recognition.face_locations(rgbFrame)
-            # faceEncodings = face_recognition.face_encodings(rgbFrame, faceLocations)
-            # faceNames = []
-            # for face_encoding in faceEncodings:
-            #     matches = face_recognition.compare_faces(knownFaces, faceEncodings)
-            #     name = "Unknown"
-
-            #     # # If a match was found in known_face_encodings, just use the first one.
-            #     # if True in matches:
-            #     #     first_match_index = matches.index(True)
-            #     #     name = known_face_names[first_match_index]
-
-            #     # Or instead, use the known face with the smallest distance to the new face
-            #     faceDistances = face_recognition.face_distance(knownFaces, faceEncodings)
-            #     bestMatchIndex = np.argmin(faceDistances)
-            #     if matches[bestMatchIndex]:
-            #         name = knownFaces[bestMatchIndex]
-
-            #     faceNames.append(name)
-
-            # for (top, right, bottom, left), name in zip(faceLocations, faceNames):
-            #     cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
-            #     cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
-            #     font = cv2.FONT_HERSHEY_DUPLEX
-            #     cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
-
-            # Encode the frame in JPEG format
+            # Transmit frame to frontend
             frame = detectAndRecognizeFace(frame)
             ret, buffer = cv2.imencode('.jpg', frame)
             frame = buffer.tobytes()
             
-            # Yield the frame in byte format with the appropriate header for streaming
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
