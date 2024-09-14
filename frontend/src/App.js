@@ -1,37 +1,55 @@
 import logo from './logo.svg';
 import './App.css';
-import React, { useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 
 
 function App() {
-  const videoRef = useRef();
+const videoRef = useRef();
+const [password, setPassword] = useState("");
+const [displayVideo, setDisplayVideo] = useState(false);
 
-  useEffect(() => {
-    videoRef.current.src = 'http://192.168.50.179:5000/video_feed';
-  }, []);
-  
-  function onButtonClick() {
-    fetch('http://192.168.50.179:5000/test')
-    .then((res) => res.text())         // Change to .json() if the response is JSON
-    .then((data) => {
-      console.log(data);               // Store the response in the state
-    })
-    .catch((err) => {
-      console.error("Error fetching data: ", err);
-    });
-  }
+useEffect(() => {
+	if (videoRef.current != null) {
+		videoRef.current.src = "";
+	}
+}, []);
+
+function verifyToken() {
+	fetch('http://192.168.50.179:5000/authenticate', {
+		method: 'POST',
+		headers: {
+		'Content-Type': 'application/json',
+		},
+		body: JSON.stringify({ token: password }),
+	})
+	.then(response => response.json())
+	.then(data => {
+		videoRef.current.src = data.videoKey;
+		if (data.display === "true") {
+			setDisplayVideo(data.display);			
+		}
+	})
+}
+
+return (
+	<div className="App">
+	<h1>Camera Feed</h1>
+	{displayVideo ? 
+		<img ref={videoRef} alt="Video feed" />
+		:
+		<div>
+			<img ref={videoRef} alt="Video feed" style={{display: "none"}} />
+		</div>
+	}
+	<br />
+	<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter Password" />
+	<button onClick={verifyToken}>
+		Enter password
+	</button>
 
 
-  return (
-    <div className="App">
-      <h1>Camera Feed</h1>
-      <img ref={videoRef} alt="Video feed" />
-      
-      <button onClick={onButtonClick}>
-        test
-      </button>
-    </div>)
+	</div>)
 }
 
 export default App;
