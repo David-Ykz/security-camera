@@ -16,7 +16,7 @@ useEffect(() => {
 }, []);
 
 function verifyToken() {
-	fetch('http://192.168.50.179:5000/authenticate', {
+	fetch('https://knee-hoped-confusion-liberia.trycloudflare.com/authenticate', {
 		method: 'POST',
 		headers: {
 		'Content-Type': 'application/json',
