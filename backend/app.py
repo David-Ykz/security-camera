@@ -1,4 +1,4 @@
-from flask import Flask, Response
+from flask import Flask, Response, request, jsonify
 from flask_cors import CORS
 import cv2
 from datetime import datetime, timedelta
@@ -12,10 +12,13 @@ load_dotenv()
 RECIPIENT_EMAIL = os.getenv('RECIPIENT_EMAIL')
 SERVER_EMAIL = os.getenv('SERVER_EMAIL')
 SERVER_PASSWORD = os.getenv('SERVER_PASSWORD')
+AUTHENTICATION_TOKEN = os.getenv('AUTHENTICATION_TOKEN')
+VIDEO_KEY = os.getenv('VIDEO_KEY')
 
 MOTION_THRESHOLD = 0.9
 MOTION_ALERT_LIMIT = 25
 SEND_EMAIL_COOLDOWN = timedelta(minutes=5)
+SEND_EMAIL_FLAG = False
 
 app = Flask(__name__)
 CORS(app)
@@ -100,7 +103,7 @@ def generate_frames():
             detectedMotion, prevMeanBrightness = detectMotion(prevMeanBrightness, frame)
             if detectedMotion:
                 motionCounter += 1
-                if motionCounter > MOTION_ALERT_LIMIT:
+                if motionCounter > MOTION_ALERT_LIMIT and SEND_EMAIL_FLAG:
                     if datetime.now() - prevEmailSentTime > SEND_EMAIL_COOLDOWN:
                         prevEmailSentTime = datetime.now()
                         sendEmail()
@@ -115,15 +118,39 @@ def generate_frames():
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
-@app.route('/video_feed')
+@app.route(f'/{VIDEO_KEY}')
 def video_feed():
-    # Video streaming route
-    return Response(generate_frames(),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
+    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-@app.route('/test')
+# @app.route('/video_feed', methods=['POST'])
+# def video_feed():
+#     data = request.get_json()
+#     print(data)
+#     token = data.get('token')
+#     if token == AUTHENTICATION_TOKEN:
+#         return Response(generate_frames(),
+#                         mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+
+
+@app.route('/authenticate', methods=['POST'])
 def test():
-    return "test response"
+    data = request.get_json()
+    token = data.get('token')
+    print(token)
+    if token == AUTHENTICATION_TOKEN:
+        response = {
+            "videoKey": f"http://192.168.50.179:5000/{VIDEO_KEY}",
+            "display": "true"
+        }
+    else:
+        response = {
+            "videoKey": "",
+            "display": "false"
+        }
+
+    return jsonify(response)
 
 
 if __name__ == '__main__':
