@@ -141,7 +141,8 @@ def test():
     print(token)
     if token == AUTHENTICATION_TOKEN:
         response = {
-            "videoKey": f"http://192.168.50.179:5000/{VIDEO_KEY}",
+            "videoKey": f"https://knee-hoped-confusion-liberia.trycloudflare.com/{VIDEO_KEY}",
+#            "videoKey": f"http://192.168.50.179:5000/{VIDEO_KEY}",
             "display": "true"
         }
     else:
