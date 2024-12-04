@@ -9,6 +9,6 @@ for i in range(NUM_PICTURES):
     time.sleep(1)
     ret, frame = cap.read()
     
-    cv2.imwrite(f"{LABEL}/{i+1}.jpg", frame)
+    cv2.imwrite(f"Raw_{LABEL}/{i+1}.jpg", frame)
 
 cap.release()
